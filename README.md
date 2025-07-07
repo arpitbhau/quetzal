@@ -16,7 +16,7 @@ A web application for managing and searching academic papers, question papers, a
 ![Login Page](screenshots/login.png)
 
 ### Dashboard (Admin View)
-![Dashboard](screenshots/dashboard.png)
+![Dashboard](screenshots/control_room.png)
 
 ## Features
 
