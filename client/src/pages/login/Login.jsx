@@ -10,11 +10,57 @@ import toast from 'react-hot-toast';
 const Login = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
-    email: '',
+    username: '',
     password: ''
   });
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [staff_members, setStaffMembers] = useState(null);
+  const [students, setStudents] = useState(null);
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
+
+  // Fetch staff members and students data from Supabase
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Fetch staff members
+        const { data: staffData, error: staffError } = await supabase
+          .from('quetzal')
+          .select('staff')
+          .limit(1);
+        
+        if (staffError) {
+          console.error('Error fetching staff members:', staffError);
+          toast.error('Failed to load staff data');
+        } else if (staffData && staffData.length > 0) {
+          setStaffMembers(staffData[0].staff);
+        }
+
+        // Fetch students
+        const { data: studentData, error: studentError } = await supabase
+          .from('quetzal')
+          .select('student')
+          .limit(1);
+        
+        if (studentError) {
+          console.error('Error fetching students:', studentError);
+          toast.error('Failed to load student data');
+        } else if (studentData && studentData.length > 0) {
+          setStudents(studentData[0].student);
+        }
+
+        // Set data loaded to true if either staff or students data is loaded
+        if ((staffData && staffData.length > 0) || (studentData && studentData.length > 0)) {
+          setIsDataLoaded(true);
+        }
+      } catch (error) {
+        console.error('Exception fetching data:', error);
+        toast.error('Failed to load data');
+      }
+    };
+
+    fetchData();
+  }, []);
 
   // GSAP animations
   useEffect(() => {
@@ -47,32 +93,64 @@ const Login = () => {
     setIsLoading(true);
     
     try {
+      // Check if username is in staff members array
+      const isStaffMember = staff_members && Array.isArray(staff_members) && staff_members.includes(formData.username);
+      
+      // Check if username is in students array
+      const isStudent = students && Array.isArray(students) && students.includes(formData.username);
+      
+      // Determine which email to use based on user type
+      let emailToUse;
+      if (isStaffMember) {
+        emailToUse = "easstaff60@gmail.com";
+      } else if (isStudent) {
+        emailToUse = "easstudent60@gmail.com";
+      } else {
+        emailToUse = formData.username; // Use username as email for regular users
+      }
+      
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: formData.email,
+        email: emailToUse,
         password: formData.password,
       });
 
       if (error) {
         console.error('Login error:', error);
-        toast.error('Invalid email or password. Please try again.');
+        toast.error('Invalid username or password. Please try again.');
         // Clear the form
         setFormData({
-          email: '',
+          username: '',
           password: ''
         });
       } else {
-        toast.success('Login successful! Redirecting to dashboard...');
-        // Redirect to dashboard after successful login
-        setTimeout(() => {
-          navigate('/dashboard');
-        }, 1500);
+        // Route users based on their type
+        if (isStaffMember) {
+          toast.success('Login successful! Redirecting to dashboard...');
+          // Redirect to dashboard after successful login
+          setTimeout(() => {
+            navigate('/dashboard');
+          }, 1500);
+        } else if (isStudent) {
+          toast.success('Login successful! Redirecting to home...');
+          // Redirect to home after successful login
+          setTimeout(() => {
+            navigate('/');
+          }, 1500);
+        } else {
+          toast.error('Access denied. Only staff members and students can access the system.');
+          // Clear the form
+          setFormData({
+            username: '',
+            password: ''
+          });
+        }
       }
     } catch (error) {
       console.error('Login exception:', error);
       toast.error('An error occurred during login. Please try again.');
       // Clear the form
       setFormData({
-        email: '',
+        username: '',
         password: ''
       });
     } finally {
@@ -131,25 +209,25 @@ const Login = () => {
             transition={{ duration: 0.8, delay: 0.6 }}
             onSubmit={handleSubmit}
           >
-            {/* Email Field */}
+            {/* Username Field */}
             <div className="mb-6">
-              <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
-                Email
+              <label htmlFor="username" className="block text-sm font-medium text-gray-300 mb-2">
+                Username
               </label>
               <div className="relative">
                 <input
-                  type="email"
-                  id="email"
-                  name="email"
-                  value={formData.email}
+                  type="text"
+                  id="username"
+                  name="username"
+                  value={formData.username}
                   onChange={handleInputChange}
                   className="w-full px-4 py-3 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-300"
-                  placeholder="Enter your email"
+                  placeholder="Enter your username"
                   required
                 />
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                   <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
                 </div>
               </div>
@@ -193,15 +271,24 @@ const Login = () => {
             {/* Login Button */}
             <motion.button
               type="submit"
-              className="w-full py-3 px-6 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-xl text-white font-medium transition-all duration-300 shadow-lg flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              disabled={isLoading}
+              className={`w-full py-3 px-6 rounded-xl text-white font-medium transition-all duration-300 shadow-lg flex items-center justify-center space-x-2 ${
+                isDataLoaded 
+                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 cursor-pointer' 
+                  : 'bg-gray-500/50 cursor-not-allowed'
+              }`}
+              whileHover={isDataLoaded ? { scale: 1.02 } : {}}
+              whileTap={isDataLoaded ? { scale: 0.98 } : {}}
+              disabled={isLoading || !isDataLoaded}
             >
               {isLoading ? (
                 <>
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                   <span>Signing In...</span>
+                </>
+              ) : !isDataLoaded ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>Loading...</span>
                 </>
               ) : (
                 <>

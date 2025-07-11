@@ -60,16 +60,14 @@ const Dashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [backend_server, setBackendServer] = useState("127.0.0.1");
   const searchInputRef = useRef(null);
   const containerRef = useRef(null);
 
   // Check authentication status
   const checkAuth = async () => {
     try {
-      console.log('🔐 Checking authentication...');
       const { data: { user }, error } = await supabase.auth.getUser();
-      
-      console.log('🔐 Auth check result:', { user, error });
       
       if (error) {
         console.error('❌ Auth error:', error);
@@ -85,7 +83,6 @@ const Dashboard = () => {
       }
       
       if (!user) {
-        console.log('❌ No user found, redirecting to login');
         setIsAuthenticated(false);
         navigate('/login');
         // Force redirect as fallback
@@ -97,7 +94,19 @@ const Dashboard = () => {
         return;
       }
       
-      console.log('✅ User authenticated:', user.email);
+      // Check if user is staff (has the correct email)
+      if (user.email !== "easstaff60@gmail.com") {
+        setIsAuthenticated(false);
+        navigate('/login');
+        // Force redirect as fallback
+        setTimeout(() => {
+          if (window.location.pathname === '/dashboard') {
+            window.location.href = '/login';
+          }
+        }, 100);
+        return;
+      }
+      
       setIsAuthenticated(true);
     } catch (error) {
       console.error('❌ Auth check exception:', error);
@@ -110,15 +119,11 @@ const Dashboard = () => {
 
   // Check auth on component mount and listen for auth changes
   useEffect(() => {
-    console.log('🚀 Dashboard mounted, checking auth...');
     checkAuth();
     
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('🔐 Auth state change:', event, session?.user?.email);
-      
       if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session?.user)) {
-        console.log('❌ User signed out or token invalid, redirecting to login');
         setIsAuthenticated(false);
         navigate('/login');
         // Force redirect as fallback
@@ -128,7 +133,6 @@ const Dashboard = () => {
           }
         }, 100);
       } else if (event === 'SIGNED_IN' && session?.user) {
-        console.log('✅ User signed in, updating auth state');
         setIsAuthenticated(true);
         setIsLoading(false);
       }
@@ -136,7 +140,6 @@ const Dashboard = () => {
     
     // Cleanup subscription
     return () => {
-      console.log('🧹 Cleaning up auth subscription');
       subscription.unsubscribe();
     };
   }, [navigate]);
@@ -430,11 +433,11 @@ const Dashboard = () => {
         let updatedSolLink = editingPaper.solLink;
         
         if (editingPaper.questionFile) {
-          updatedQueLink = `http://127.0.0.1:3000/download/${editingPaper.paperID}/question_paper.pdf`;
+          updatedQueLink = `http://${backend_server}:3000/download/${editingPaper.paperID}/question_paper.pdf`;
         }
         
         if (editingPaper.answerFile) {
-          updatedSolLink = `http://127.0.0.1:3000/download/${editingPaper.paperID}/ans_key.pdf`;
+          updatedSolLink = `http://${backend_server}:3000/download/${editingPaper.paperID}/ans_key.pdf`;
         }
 
         // Update paper data regardless of file upload status
@@ -625,12 +628,10 @@ const Dashboard = () => {
       
       if (newPaper.questionFile) {
         questionLink = `http://127.0.0.1:3000/download/${paperID}/question_paper.pdf`;
-        console.log('Question file:', newPaper.questionFile);
       }
       
       if (newPaper.answerFile) {
         solutionLink = `http://127.0.0.1:3000/download/${paperID}/ans_key.pdf`;
-        console.log('Answer file:', newPaper.answerFile);
       }
       
       const paperToAdd = {
@@ -702,13 +703,11 @@ const Dashboard = () => {
 
   const handleLogout = async () => {
     try {
-      console.log('🚪 Attempting logout...');
       const { error } = await supabase.auth.signOut();
       if (error) {
         console.error('❌ Logout error:', error);
         toast.error('Logout failed. Please try again.');
       } else {
-        console.log('✅ Logout successful');
         toast.success('Logged out successfully! Redirecting to home...');
         // Immediately set auth state to false
         setIsAuthenticated(false);

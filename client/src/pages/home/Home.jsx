@@ -4,7 +4,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { gsap } from 'gsap';
 import { useNavigate } from 'react-router-dom';
+import supabase from '../../supabase/supabaseConfig';
 import { getPapers, subscribeToChanges, initializePapers } from '../../data/papersData';
+import toast from 'react-hot-toast';
 
 function formatDate(date) {
   if (!date) return '';
@@ -35,13 +37,68 @@ const Home = () => {
   });
   const [isSearching, setIsSearching] = useState(false);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const searchInputRef = useRef(null);
   const containerRef = useRef(null);
 
-  // Initialize papers data when component mounts
+  // Check authentication status
+  const checkAuth = async () => {
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      
+      if (error) {
+        console.error('❌ Auth error:', error);
+        setIsAuthenticated(false);
+        navigate('/login');
+        return;
+      }
+      
+      if (!user) {
+        setIsAuthenticated(false);
+        navigate('/login');
+        return;
+      }
+      
+      // Allow any authenticated user to access home page
+      setIsAuthenticated(true);
+    } catch (error) {
+      console.error('❌ Auth check exception:', error);
+      setIsAuthenticated(false);
+      navigate('/login');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Check auth on component mount and listen for auth changes
   useEffect(() => {
-    initializePapers();
-  }, []);
+    checkAuth();
+    
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session?.user)) {
+        setIsAuthenticated(false);
+        navigate('/login');
+      } else if (event === 'SIGNED_IN' && session?.user) {
+        setIsAuthenticated(true);
+        setIsLoading(false);
+      }
+    });
+    
+    // Cleanup subscription
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [navigate]);
+
+  // Initialize papers data when component mounts and user is authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      initializePapers();
+    }
+  }, [isAuthenticated]);
 
   // GSAP animations
   useEffect(() => {
@@ -229,6 +286,32 @@ const Home = () => {
 
   const handleControlRoom = () => {
     navigate('/dashboard');
+  };
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    const loadingToast = toast.loading('Logging out...');
+    
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('❌ Logout error:', error);
+        toast.error('Logout failed. Please try again.', { id: loadingToast });
+      } else {
+        toast.success('Logged out successfully! Redirecting to login...', { id: loadingToast });
+        // Immediately set auth state to false
+        setIsAuthenticated(false);
+        // Redirect to login page after logout
+        setTimeout(() => {
+          navigate('/login');
+        }, 1500);
+      }
+    } catch (error) {
+      console.error('❌ Logout exception:', error);
+      toast.error('An error occurred during logout. Please try again.', { id: loadingToast });
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   const handleDownload = (url, filename) => {
@@ -551,6 +634,23 @@ const Home = () => {
     </div>
   );
 
+  // Show loading screen while checking authentication
+  if (isLoading) {
+    return (
+      <div className="min-h-screen dark-neon-bg neon-blur text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-400">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render home if not authenticated (will redirect)
+  if (!isAuthenticated) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen dark-neon-bg neon-blur text-white select-none">
       {/* Bouncing neon circles */}
@@ -585,7 +685,7 @@ const Home = () => {
                 </span>
               </motion.div>
 
-              {/* Control Room Button and User Info */}
+              {/* Control Room Button, Logout Button and User Info */}
               <div className="flex items-center space-x-2">
                 <motion.button
                   onClick={handleControlRoom}
@@ -594,6 +694,26 @@ const Home = () => {
                   whileTap={{ scale: 0.95 }}
                 >
                   Control Room
+                </motion.button>
+                <motion.button
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
+                  className={`px-3 py-1.5 backdrop-blur-sm border rounded-lg font-medium transition-all duration-300 text-xs ${
+                    isLoggingOut 
+                      ? 'bg-gray-500/20 border-gray-400/30 text-gray-300 cursor-not-allowed' 
+                      : 'bg-red-500/20 border-red-400/30 text-red-300 cursor-pointer hover:bg-red-500/30 hover:border-red-400/50 hover:backdrop-blur-md'
+                  }`}
+                  whileHover={isLoggingOut ? {} : { scale: 0.98 }}
+                  whileTap={isLoggingOut ? {} : { scale: 0.95 }}
+                >
+                  {isLoggingOut ? (
+                    <>
+                      <div className="w-3 h-3 border-2 border-red-300 border-t-transparent rounded-full animate-spin inline-block mr-1"></div>
+                      <span>Logging out...</span>
+                    </>
+                  ) : (
+                    'Logout'
+                  )}
                 </motion.button>
                 <motion.a 
                   href="https://github.com/arpitbhau"
@@ -713,7 +833,7 @@ const Home = () => {
               </div>
             </motion.div>
 
-            {/* Control Room Button and User Info */}
+            {/* Control Room Button, Logout Button and User Info */}
             <div className="flex items-center space-x-4">
               <motion.button
                 onClick={handleControlRoom}
@@ -722,6 +842,26 @@ const Home = () => {
                 whileTap={{ scale: 0.95 }}
               >
                 Control Room
+              </motion.button>
+              <motion.button
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+                className={`px-4 py-2 backdrop-blur-sm border rounded-xl font-medium transition-all duration-300 ${
+                  isLoggingOut 
+                    ? 'bg-gray-500/20 border-gray-400/30 text-gray-300 cursor-not-allowed' 
+                    : 'bg-red-500/20 border-red-400/30 text-red-300 cursor-pointer hover:bg-red-500/30 hover:border-red-400/50 hover:backdrop-blur-md'
+                }`}
+                whileHover={isLoggingOut ? {} : { scale: 0.98 }}
+                whileTap={isLoggingOut ? {} : { scale: 0.95 }}
+              >
+                {isLoggingOut ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-red-300 border-t-transparent rounded-full animate-spin inline-block mr-2"></div>
+                    <span>Logging out...</span>
+                  </>
+                ) : (
+                  'Logout'
+                )}
               </motion.button>
               <motion.a 
                 href="https://github.com/arpitbhau"
