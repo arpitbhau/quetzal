@@ -7,6 +7,16 @@ import { useNavigate } from 'react-router-dom';
 import supabase from '../../supabase/supabaseConfig';
 import toast from 'react-hot-toast';
 
+// Function to create SHA256 hash
+const createSHA256Hash = async (text) => {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(text);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashHex;
+};
+
 const Login = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
@@ -15,52 +25,13 @@ const Login = () => {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [staff_members, setStaffMembers] = useState(null);
-  const [students, setStudents] = useState(null);
-  const [isDataLoaded, setIsDataLoaded] = useState(false);
-
-  // Fetch staff members and students data from Supabase
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Fetch staff members
-        const { data: staffData, error: staffError } = await supabase
-          .from('quetzal')
-          .select('staff')
-          .limit(1);
-        
-        if (staffError) {
-          console.error('Error fetching staff members:', staffError);
-          toast.error('Failed to load staff data');
-        } else if (staffData && staffData.length > 0) {
-          setStaffMembers(staffData[0].staff);
-        }
-
-        // Fetch students
-        const { data: studentData, error: studentError } = await supabase
-          .from('quetzal')
-          .select('student')
-          .limit(1);
-        
-        if (studentError) {
-          console.error('Error fetching students:', studentError);
-          toast.error('Failed to load student data');
-        } else if (studentData && studentData.length > 0) {
-          setStudents(studentData[0].student);
-        }
-
-        // Set data loaded to true if either staff or students data is loaded
-        if ((staffData && staffData.length > 0) || (studentData && studentData.length > 0)) {
-          setIsDataLoaded(true);
-        }
-      } catch (error) {
-        console.error('Exception fetching data:', error);
-        toast.error('Failed to load data');
-      }
-    };
-
-    fetchData();
-  }, []);
+  
+  // Password change popup states
+  const [showPasswordChangePopup, setShowPasswordChangePopup] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [currentUserData, setCurrentUserData] = useState(null);
 
   // GSAP animations
   useEffect(() => {
@@ -88,63 +59,214 @@ const Login = () => {
     }));
   };
 
+  // Function to check if username hash matches password hash
+  const checkUsernamePasswordMatch = async (username, userType, combination) => {
+    try {
+      // Create hash of username
+      const usernameHash = await createSHA256Hash(username);
+      
+      // Extract the password hash from the combination (after the colon)
+      const parts = combination.split(':');
+      if (parts.length !== 2) return false;
+      
+      const storedPasswordHash = parts[1];
+      
+      // Compare username hash with stored password hash
+      return usernameHash === storedPasswordHash;
+    } catch (error) {
+      console.error('Error checking username/password match:', error);
+      return false;
+    }
+  };
+
+  // Function to update password in database
+  const updatePasswordInDatabase = async (username, newPassword, userType) => {
+    try {
+      const newPasswordHash = await createSHA256Hash(newPassword);
+      const newCombination = `${username}:${newPasswordHash}`;
+      
+      // Update the database record
+      const { error } = await supabase
+        .from('quetzal_users')
+        .update({ [userType]: newCombination })
+        .eq(userType, `${username}:${await createSHA256Hash(formData.password)}`);
+      
+      if (error) {
+        console.error('Error updating password:', error);
+        throw new Error('Failed to update password');
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error updating password:', error);
+      throw error;
+    }
+  };
+
+  // Function to handle password change
+  const handlePasswordChange = async (e) => {
+    e.preventDefault();
+    
+    if (newPassword !== confirmPassword) {
+      toast.error('Passwords do not match!');
+      return;
+    }
+    
+    if (newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters long!');
+      return;
+    }
+    
+    setIsChangingPassword(true);
+    
+    try {
+      const loadingToast = toast.loading('Updating password...');
+      
+      await updatePasswordInDatabase(
+        currentUserData.username, 
+        newPassword, 
+        currentUserData.userType
+      );
+      
+      toast.success('Password updated successfully!', { id: loadingToast });
+      setShowPasswordChangePopup(false);
+      setNewPassword('');
+      setConfirmPassword('');
+      setCurrentUserData(null);
+      
+    } catch (error) {
+      toast.error('Failed to update password. Please try again.');
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
     
     try {
-      // Check if username is in staff members array
-      const isStaffMember = staff_members && Array.isArray(staff_members) && staff_members.includes(formData.username);
+      // Show logging in toast
+      const loadingToast = toast.loading('Logging in...');
       
-      // Check if username is in students array
-      const isStudent = students && Array.isArray(students) && students.includes(formData.username);
+      // Step 1: Create SHA256 hash of password
+      const passwordHash = await createSHA256Hash(formData.password);
       
-      // Determine which email to use based on user type
-      let emailToUse;
-      if (isStaffMember) {
-        emailToUse = "easstaff60@gmail.com";
-      } else if (isStudent) {
-        emailToUse = "easstudent60@gmail.com";
-      } else {
-        emailToUse = formData.username; // Use username as email for regular users
+      // Step 2: Combine username and password hash
+      const combination = `${formData.username}:${passwordHash}`;
+      
+      // Step 3: Check if combination exists in staff column
+      const { data: staffData, error: staffError } = await supabase
+        .from('quetzal_users')
+        .select('staff');
+      
+      if (staffError) {
+        console.error('Error checking staff:', staffError);
+        toast.error('Authentication error. Please try again.');
+        toast.dismiss(loadingToast);
+        return;
       }
       
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: emailToUse,
-        password: formData.password,
-      });
-
-      if (error) {
-        console.error('Login error:', error);
-        toast.error('Invalid username or password. Please try again.');
-        // Clear the form
-        setFormData({
-          username: '',
-          password: ''
+      // Check if combination exists in any staff array
+      const foundInStaff = staffData && staffData.some(row => 
+        row.staff && row.staff === combination
+      );
+      
+      // If found in staff column
+      if (foundInStaff) {
+        // Check if username hash matches password hash
+        const needsPasswordChange = await checkUsernamePasswordMatch(formData.username, 'staff', combination);
+        
+        if (needsPasswordChange) {
+          // Store current user data for password change
+          setCurrentUserData({
+            username: formData.username,
+            userType: 'staff'
+          });
+          setShowPasswordChangePopup(true);
+          toast.dismiss(loadingToast);
+          return;
+        }
+        
+        // Login with staff credentials
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: import.meta.env.VITE_STAFF_EMAIL,
+          password: import.meta.env.VITE_STAFF_PASSWORD,
         });
-      } else {
-        // Route users based on their type
-        if (isStaffMember) {
-          toast.success('Login successful! Redirecting to dashboard...');
-          // Redirect to dashboard after successful login
-          setTimeout(() => {
-            navigate('/dashboard');
-          }, 1500);
-        } else if (isStudent) {
-          toast.success('Login successful! Redirecting to home...');
-          // Redirect to home after successful login
+
+        if (error) {
+          console.error('Staff login error:', error);
+          toast.error('Authentication failed. Please try again.');
+          toast.dismiss(loadingToast);
+        } else {
+          toast.success('Login successful! Redirecting to dashboard...', { id: 'login-success' });
+          toast.dismiss(loadingToast);
+          navigate('/dashboard');
+        }
+        return;
+      }
+      
+      // Step 4: Check if combination exists in students column
+      const { data: studentData, error: studentError } = await supabase
+        .from('quetzal_users')
+        .select('students');
+      
+      if (studentError) {
+        console.error('Error checking students:', studentError);
+        toast.error('Authentication error. Please try again.');
+        toast.dismiss(loadingToast);
+        return;
+      }
+      
+      // Check if combination exists in any students array
+      const foundInStudents = studentData && studentData.some(row => 
+        row.students && row.students === combination
+      );
+      
+      // If found in students column
+      if (foundInStudents) {
+        // Check if username hash matches password hash
+        const needsPasswordChange = await checkUsernamePasswordMatch(formData.username, 'students', combination);
+        
+        if (needsPasswordChange) {
+          // Store current user data for password change
+          setCurrentUserData({
+            username: formData.username,
+            userType: 'students'
+          });
+          setShowPasswordChangePopup(true);
+          toast.dismiss(loadingToast);
+          return;
+        }
+        
+        // Login with student credentials
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: import.meta.env.VITE_STUDENT_EMAIL,
+          password: import.meta.env.VITE_STUDENT_PASSWORD,
+        });
+
+        if (error) {
+          console.error('Student login error:', error);
+          toast.error('Authentication failed. Please try again.');
+          toast.dismiss(loadingToast);
+        } else {
+          toast.success('Login successful! Redirecting to home...', { id: loadingToast });
           setTimeout(() => {
             navigate('/');
           }, 1500);
-        } else {
-          toast.error('Access denied. Only staff members and students can access the system.');
-          // Clear the form
-          setFormData({
-            username: '',
-            password: ''
-          });
         }
+        return;
       }
+      
+      // Step 5: If not found in either column, show error
+      toast.error('Invalid username or password. Please try again.', { id: loadingToast });
+      
+      // Clear the form
+      setFormData({
+        username: '',
+        password: ''
+      });
+      
     } catch (error) {
       console.error('Login exception:', error);
       toast.error('An error occurred during login. Please try again.');
@@ -271,24 +393,15 @@ const Login = () => {
             {/* Login Button */}
             <motion.button
               type="submit"
-              className={`w-full py-3 px-6 rounded-xl text-white font-medium transition-all duration-300 shadow-lg flex items-center justify-center space-x-2 ${
-                isDataLoaded 
-                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 cursor-pointer' 
-                  : 'bg-gray-500/50 cursor-not-allowed'
-              }`}
-              whileHover={isDataLoaded ? { scale: 1.02 } : {}}
-              whileTap={isDataLoaded ? { scale: 0.98 } : {}}
-              disabled={isLoading || !isDataLoaded}
+              className="w-full py-3 px-6 rounded-xl text-white font-medium transition-all duration-300 shadow-lg flex items-center justify-center space-x-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 cursor-pointer"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              disabled={isLoading}
             >
               {isLoading ? (
                 <>
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                   <span>Signing In...</span>
-                </>
-              ) : !isDataLoaded ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Loading...</span>
                 </>
               ) : (
                 <>
@@ -328,6 +441,89 @@ const Login = () => {
           </motion.a>
         </motion.div>
       </div>
+
+      {/* Password Change Popup */}
+      {showPasswordChangePopup && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <motion.div 
+            className="neon-glass rounded-3xl p-8 shadow-2xl w-full max-w-md"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-white mb-2">Change Password</h2>
+              <p className="text-gray-400">Your username hash matches your password hash. Please change your password for security.</p>
+            </div>
+
+            <form onSubmit={handlePasswordChange}>
+              <div className="mb-4">
+                <label htmlFor="newPassword" className="block text-sm font-medium text-gray-300 mb-2">
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  id="newPassword"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full px-4 py-3 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-300"
+                  placeholder="Enter new password"
+                  required
+                />
+              </div>
+
+              <div className="mb-6">
+                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-300 mb-2">
+                  Confirm New Password
+                </label>
+                <input
+                  type="password"
+                  id="confirmPassword"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-4 py-3 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-300"
+                  placeholder="Confirm new password"
+                  required
+                />
+              </div>
+
+              <div className="flex space-x-3">
+                <motion.button
+                  type="button"
+                  onClick={() => {
+                    setShowPasswordChangePopup(false);
+                    setNewPassword('');
+                    setConfirmPassword('');
+                    setCurrentUserData(null);
+                  }}
+                  className="flex-1 py-3 px-6 rounded-xl text-white font-medium transition-all duration-300 shadow-lg bg-gray-600 hover:bg-gray-700"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  disabled={isChangingPassword}
+                >
+                  Cancel
+                </motion.button>
+
+                <motion.button
+                  type="submit"
+                  className="flex-1 py-3 px-6 rounded-xl text-white font-medium transition-all duration-300 shadow-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  disabled={isChangingPassword}
+                >
+                  {isChangingPassword ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto"></div>
+                    </>
+                  ) : (
+                    'Update Password'
+                  )}
+                </motion.button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };

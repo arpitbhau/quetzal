@@ -43,6 +43,7 @@ const Dashboard = () => {
   const [editingPaper, setEditingPaper] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showCreatorModal, setShowCreatorModal] = useState(false);
   const [newPaper, setNewPaper] = useState({
     title: '',
     date: {
@@ -95,7 +96,7 @@ const Dashboard = () => {
       }
       
       // Check if user is staff (has the correct email)
-      if (user.email !== "easstaff60@gmail.com") {
+      if (user.email !== import.meta.env.VITE_STAFF_EMAIL) {
         setIsAuthenticated(false);
         navigate('/login');
         // Force redirect as fallback
@@ -230,10 +231,8 @@ const Dashboard = () => {
             // MHT-CET logic
             if (filters.mhtcet.all) return true;
             // PCM/PCB subfilters (only one can be selected at a time)
-            const isPCM = /pcm/i.test(result.title);
-            const isPCB = /pcb/i.test(result.title);
-            if (filters.mhtcet.pcm && isPCM) return true;
-            if (filters.mhtcet.pcb && isPCB) return true;
+            if (filters.mhtcet.pcm && result.mhtcetType === 'pcm') return true;
+            if (filters.mhtcet.pcb && result.mhtcetType === 'pcb') return true;
             return false;
           }
           return false;
@@ -1112,28 +1111,32 @@ const Dashboard = () => {
                 >
                   Logout
                 </motion.button>
-                  <motion.a 
-                    href="https://github.com/arpitbhau"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center space-x-1 sm:space-x-2 cursor-pointer"
-                    whileHover={{ scale: 0.98 }}
-                    transition={{ type: "spring", stiffness: 300 }}
-                  >
-                    <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-full p-1 sm:p-1.5 shadow-lg">
-                      <img 
-                        src="https://avatars.githubusercontent.com/u/149021988?v=4" 
-                        alt="GitHub Avatar" 
-                        className="w-5 h-5 sm:w-6 sm:h-6 rounded-full"
-                      />
-                    </div>
-                    <div className="hidden sm:flex flex-col">
-                      <span className="text-xs text-gray-400">Created by</span>
-                      <span className="text-xs text-white font-medium">arpitbhau</span>
-                    </div>
-                  </motion.a>
-                </div>
+                <motion.a 
+                  href="https://github.com/arpitbhau"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center space-x-3 cursor-pointer"
+                  whileHover={{ scale: 0.98 }}
+                  transition={{ type: "spring", stiffness: 300 }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setShowCreatorModal(true);
+                  }}
+                >
+                  <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-full p-2 shadow-lg">
+                    <img 
+                      src="https://avatars.githubusercontent.com/u/149021988?v=4" 
+                      alt="GitHub Avatar" 
+                      className="w-8 h-8 rounded-full"
+                    />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs text-gray-400">Created by</span>
+                    <span className="text-sm text-white font-medium">arpitbhau</span>
+                  </div>
+                </motion.a>
               </div>
+            </div>
 
             {/* Search Bar */}
             <motion.div 
@@ -1256,6 +1259,10 @@ const Dashboard = () => {
                 className="flex items-center space-x-3 cursor-pointer"
                 whileHover={{ scale: 0.98 }}
                 transition={{ type: "spring", stiffness: 300 }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  setShowCreatorModal(true);
+                }}
               >
                 <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-full p-2 shadow-lg">
                   <img 
@@ -1364,6 +1371,11 @@ const Dashboard = () => {
                             <span className="px-1.5 lg:px-2 py-1 rounded-full text-xs font-medium bg-gray-500/20 text-gray-300">
                               Std {result.std}
                             </span>
+                            {result.category === 'mhtcet' && (
+                              <span className="px-1.5 lg:px-2 py-1 rounded-full text-xs font-medium bg-indigo-500/20 text-indigo-300">
+                                {result.mhtcetType.toUpperCase()}
+                              </span>
+                            )}
                           </div>
                           <span className="text-xs text-gray-400">{formatDate(result.date)}</span>
                         </div>
@@ -1926,6 +1938,70 @@ const Dashboard = () => {
                      'Upload Paper'
                    )}
                  </motion.button>
+               </div>
+             </motion.div>
+           </motion.div>
+         )}
+       </AnimatePresence>
+
+       {/* Creator Modal */}
+       <AnimatePresence>
+         {showCreatorModal && (
+           <motion.div
+             className="fixed inset-0 z-50 flex items-center justify-center p-4"
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             exit={{ opacity: 0 }}
+           >
+             {/* Backdrop */}
+             <motion.div
+               className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+               onClick={() => setShowCreatorModal(false)}
+               initial={{ opacity: 0 }}
+               animate={{ opacity: 1 }}
+               exit={{ opacity: 0 }}
+             />
+             
+             {/* Modal */}
+             <motion.div
+               className="relative bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-6 w-full max-w-sm shadow-2xl"
+               initial={{ scale: 0.9, opacity: 0 }}
+               animate={{ scale: 1, opacity: 1 }}
+               exit={{ scale: 0.9, opacity: 0 }}
+               transition={{ type: "spring", damping: 25, stiffness: 300 }}
+             >
+               <div className="text-center">
+                 <div className="w-16 h-16 mx-auto mb-4 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full flex items-center justify-center">
+                   <img 
+                     src="https://avatars.githubusercontent.com/u/149021988?v=4" 
+                     alt="Creator Avatar" 
+                     className="w-12 h-12 rounded-full"
+                   />
+                 </div>
+                 <h3 className="text-lg font-bold text-white mb-2">arpitbhau</h3>
+                 <p className="text-gray-300 mb-6">It's the creator of this app</p>
+                 
+                 <div className="space-y-3">
+                   <motion.button
+                     onClick={() => {
+                       setShowCreatorModal(false);
+                       window.open('https://github.com/arpitbhau', '_blank');
+                     }}
+                     className="w-full py-3 bg-purple-500/20 backdrop-blur-sm border border-purple-400/30 rounded-xl text-purple-300 font-medium cursor-pointer hover:bg-purple-500/30 hover:border-purple-400/50 hover:backdrop-blur-md transition-all duration-300"
+                     whileHover={{ scale: 0.98 }}
+                     whileTap={{ scale: 0.95 }}
+                   >
+                     See God's Profile
+                   </motion.button>
+                   <motion.button
+                     onClick={() => setShowCreatorModal(false)}
+                     className="w-full py-3 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl text-white font-medium cursor-pointer hover:bg-white/20 hover:border-white/30 hover:backdrop-blur-md transition-all duration-300"
+                     whileHover={{ scale: 0.98 }}
+                     whileTap={{ scale: 0.95 }}
+                   >
+                     Stay Here for Now
+                   </motion.button>
+                 </div>
                </div>
              </motion.div>
            </motion.div>
