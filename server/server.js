@@ -11,23 +11,39 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 
 // Middleware
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// CORS middleware (if needed for frontend)
+// CORS middleware for frontend - COMMENTED OUT
+/*
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  const allowedOrigins = [
+    SERVER_CONFIG.CORS_ORIGIN,
+    `http://${SERVER_CONFIG.DOMAIN}:5173`,
+    `http://${SERVER_CONFIG.DOMAIN}:3000`,
+    `http://localhost:5173`,
+    `http://localhost:3000`
+  ];
+  
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
+  
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
   if (req.method === 'OPTIONS') {
     res.sendStatus(200);
   } else {
     next();
   }
 });
+*/
 
 // Custom download route that forces download
 app.get('/download/:paperId/:filename', (req, res) => {
@@ -62,6 +78,6 @@ app.use('/api', multerApi);
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`Server is running on 127.0.0.1:${PORT}`);
 });
 
