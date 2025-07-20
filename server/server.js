@@ -21,7 +21,8 @@ const certPath = path.join(__dirname, 'cert.pem');
 if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
   console.log('Generating self-signed SSL certificate...');
   const attrs = [{ name: 'commonName', value: 'localhost' }];
-  const pems = selfsigned.generate(attrs, { days: 365 });
+  // Use 2048-bit key and sha256 for security
+  const pems = selfsigned.generate(attrs, { days: 365, keySize: 2048, algorithm: 'sha256' });
   fs.writeFileSync(keyPath, pems.private);
   fs.writeFileSync(certPath, pems.cert);
   console.log('Self-signed certificate generated.');
