@@ -6,31 +6,14 @@ import multerApi from './api/multer_api.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
-import https from 'https';
-import selfsigned from 'selfsigned';
+// Removed: import https from 'https';
+// Removed: import selfsigned from 'selfsigned';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3000;
-
-// HTTPS certificate and key (self-signed for dev)
-const keyPath = path.join(__dirname, 'key.pem');
-const certPath = path.join(__dirname, 'cert.pem');
-if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
-  console.log('Generating self-signed SSL certificate...');
-  const attrs = [{ name: 'commonName', value: 'localhost' }];
-  // Use 2048-bit key and sha256 for security
-  const pems = selfsigned.generate(attrs, { days: 365, keySize: 2048, algorithm: 'sha256' });
-  fs.writeFileSync(keyPath, pems.private);
-  fs.writeFileSync(certPath, pems.cert);
-  console.log('Self-signed certificate generated.');
-}
-const httpsOptions = {
-  key: fs.readFileSync(keyPath),
-  cert: fs.readFileSync(certPath),
-};
 
 // Middleware
 app.use(bodyParser.json());
@@ -95,8 +78,8 @@ app.get('/', (req, res) => {
 // Multer API routes
 app.use('/api', multerApi);
 
-// Start HTTPS server
-https.createServer(httpsOptions, app).listen(PORT, () => {
-  console.log(`HTTPS server running on port ${PORT}`);
+// Start HTTP server
+app.listen(PORT, () => {
+  console.log(`HTTP server running on port ${PORT}`);
 });
 
