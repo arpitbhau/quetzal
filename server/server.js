@@ -6,12 +6,26 @@ import multerApi from './api/multer_api.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import https from 'https';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3000;
+
+// HTTPS certificate and key (self-signed for dev)
+const keyPath = path.join(__dirname, 'key.pem');
+const certPath = path.join(__dirname, 'cert.pem');
+if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
+  console.error('Missing key.pem or cert.pem in server directory.');
+  console.error('Generate with: openssl req -nodes -new -x509 -keyout key.pem -out cert.pem -days 365');
+  process.exit(1);
+}
+const httpsOptions = {
+  key: fs.readFileSync(keyPath),
+  cert: fs.readFileSync(certPath),
+};
 
 // Middleware
 app.use(bodyParser.json());
@@ -76,8 +90,8 @@ app.get('/', (req, res) => {
 // Multer API routes
 app.use('/api', multerApi);
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server is running on 127.0.0.1:${PORT}`);
+// Start HTTPS server
+https.createServer(httpsOptions, app).listen(PORT, () => {
+  console.log(`HTTPS server running on port ${PORT}`);
 });
 
