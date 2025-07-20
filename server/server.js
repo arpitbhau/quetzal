@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import https from 'https';
+import selfsigned from 'selfsigned';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,9 +19,12 @@ const PORT = 3000;
 const keyPath = path.join(__dirname, 'key.pem');
 const certPath = path.join(__dirname, 'cert.pem');
 if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
-  console.error('Missing key.pem or cert.pem in server directory.');
-  console.error('Generate with: openssl req -nodes -new -x509 -keyout key.pem -out cert.pem -days 365');
-  process.exit(1);
+  console.log('Generating self-signed SSL certificate...');
+  const attrs = [{ name: 'commonName', value: 'localhost' }];
+  const pems = selfsigned.generate(attrs, { days: 365 });
+  fs.writeFileSync(keyPath, pems.private);
+  fs.writeFileSync(certPath, pems.cert);
+  console.log('Self-signed certificate generated.');
 }
 const httpsOptions = {
   key: fs.readFileSync(keyPath),
